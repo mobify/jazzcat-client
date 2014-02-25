@@ -21,7 +21,7 @@
  * into the cache using a bootloader request to Jazzcat. Scripts are then
  * executed directly from the cache.
  */
-define(["mobifyjs/utils"], function(Utils) {
+define(["utils"], function(Utils) {
     /**
      * An HTTP 1.1 compliant localStorage backed cache.
      */
