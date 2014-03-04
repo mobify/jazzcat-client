@@ -21,7 +21,21 @@
  * into the cache using a bootloader request to Jazzcat. Scripts are then
  * executed directly from the cache.
  */
-define(["utils"], function(Utils) {
+(function (root, factory) {
+    if (typeof define === 'function' && define.amd) {
+        // AMD. Register as an anonymous module.
+        define(["mobifyjs/utils"], factory);
+    } else if (typeof exports === 'object') {
+        // Node. Does not work with strict CommonJS, but
+        // only CommonJS-like environments that support module.exports,
+        // like Node.
+        var Utils = require('./utils.js');
+        module.exports = factory(Utils);
+    } else {
+        // Browser globals (root is window)
+        root.Jazzcat = factory(root.Utils);
+    }
+}(this, function (Utils) {
     /**
      * An HTTP 1.1 compliant localStorage backed cache.
      */
@@ -344,9 +358,6 @@ define(["utils"], function(Utils) {
             if (script) {
                 var loader = Jazzcat.getLoaderScript(urls, options);
                 // insert the loader directly before the script
-                if (script.parentNode === null) {
-                    return;
-                }
                 script.parentNode.insertBefore(loader, script);
             }
         };
@@ -389,14 +400,12 @@ define(["utils"], function(Utils) {
             if (jsonp && !Jazzcat.cacheLoaderInserted) {
                 httpCache.load(httpCache.options);
                 var httpLoaderScript = Jazzcat.getHttpCacheLoaderScript();
-                if (script.parentNode !== null) {
-                    script.parentNode.insertBefore(httpLoaderScript, script);
-                    // ensure this doesn't happen again for this page load
-                    Jazzcat.cacheLoaderInserted = true;
-                }
+                script.parentNode.insertBefore(httpLoaderScript, script);
+                // ensure this doesn't happen again for this page load
+                Jazzcat.cacheLoaderInserted = true;
             }
 
-            var parent = (script.parentNode !== null && script.parentNode.nodeName === "HEAD" ? "head" : "body");
+            var parent = (script.parentNode.nodeName === "HEAD" ? "head" : "body");
 
             if (jsonp) {
                 // if: the script is not in the cache (or not jsonp), add a loader
@@ -559,10 +568,7 @@ define(["utils"], function(Utils) {
         // http://hsivonen.iki.fi/script-execution/
         // http://wiki.whatwg.org/wiki/Dynamic_Script_Execution_Order
         // This call seems to do nothing in Opera 11/12
-        // Also, Uglify will strip out the escape here, so we need to split up
-        // '<' and '/' to prevent browsers (Firefox in this case) 
-        // from barfing when attempting to document.write this out.
-        Jazzcat.write.call(document, '<script ' + out +'<' + '/script>');
+        Jazzcat.write.call(document, '<script ' + out +'<\/script>');
     };
 
     /**
@@ -605,4 +611,4 @@ define(["utils"], function(Utils) {
     };
 
     return Jazzcat;
-});
+}));
