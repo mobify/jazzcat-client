@@ -38,7 +38,7 @@
 </textarea>
 
 <textarea id="optimizeScripts-loader">
-    <script src="../bower_components/mobifyjs/build/mobify.js"></script>
+    <script src="../jazzcat.js"></script>
     <script>
         Jazzcat.httpCache.load();
         var scripts = document.getElementsByTagName("textarea")[0].textContent;
@@ -52,7 +52,7 @@
 </textarea>
 
 <textarea id="optimizeScripts-coldcache-loader">
-    <script src="../bower_components/mobifyjs/build/mobify.js"></script>
+    <script src="../jazzcat.js"></script>
     <script>
         Jazzcat.httpCache.load();
         var scripts = document.getElementsByTagName("textarea")[0].textContent;
@@ -62,7 +62,7 @@
 </textarea>
 
 <textarea id="optimizeScripts-cache-override-loader">
-    <script src="../bower_components/mobifyjs/build/mobify.js"></script>
+    <script src="../jazzcat.js"></script>
 </textarea>
 
 <textarea id="optimizeScripts-cache-override-scripts">
@@ -79,7 +79,8 @@
 
 
 <textarea id="test-jazzcat-exec-document-write-override">
-    <script src="../bower_components/mobifyjs/build/mobify.js"></script>
+    <script src="../bower_components/mobifyjs-utils/utils.js"></script>
+    <script src="../jazzcat.js"></script>
     <script>
         document.write = function() {
             parent.postMessage(false, "*");
