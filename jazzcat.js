@@ -341,6 +341,14 @@
             Utils.extend(httpCache.options,
               {overrideTime: options.cacheOverrideTime});
         }
+
+        // A Boolean to control whether the loader is inlined into the document, 
+        // or only added to the returned scripts array
+        var inlineLoader = false;
+        if (options && options.inlineLoader) {
+            inlineLoader = true;
+        }
+
         scripts = Array.prototype.slice.call(scripts);
 
         // Fastfail if there are no scripts or if required features are missing.
@@ -354,11 +362,20 @@
 
         // helper method for inserting the loader script
         // before the first uncached script in the "uncached" array
-        var insertLoader = function(script, urls) {
+        var insertLoaderInContainingElement = function(script, urls) {
             if (script) {
                 var loader = Jazzcat.getLoaderScript(urls, options);
                 // insert the loader directly before the script
                 script.parentNode.insertBefore(loader, script);
+            }
+        };
+        // helper for appending loader script into an array before the 
+        // referenced script
+        var appendLoaderAndScriptToArray = function(array, script, urls) {
+            if (array) {
+                var loader  = Jazzcat.getLoaderScript(urls, options);
+                array.push(loader);
+                array.push(script);
             }
         };
 
@@ -374,6 +391,16 @@
             }
         };
 
+        // an array to accumulate resulting scripts in and later return
+        var resultScripts = [];
+        /**
+        DEBUG
+        **/
+        // resultScripts.push = function() {
+        //     debugger;
+        //     Array.prototype.push.apply(this, arguments);
+        // };
+
         for (var i=0, len=scripts.length; i<len; i++) {
             var script = scripts[i];
 
@@ -384,10 +411,15 @@
                 continue;
             }
 
-            // skip if the script is inline
+            // skip if modifying inline, append to results otherwise
             url = script.getAttribute(options.attribute);
             if (!url) {
-                continue;
+                if (inlineLoader) {
+                    continue;
+                } else {
+                    resultScripts.push(script);
+                    continue;
+                }
             }
             url = Utils.absolutify(url);
             if (!Utils.httpUrl(url)) {
@@ -396,23 +428,39 @@
 
             // TODO: Check for async/defer
 
-            // Load what we have in http cache, and insert loader into document
+            // Load what we have in http cache, and insert loader into document 
+            // or result array
             if (jsonp && !Jazzcat.cacheLoaderInserted) {
                 httpCache.load(httpCache.options);
-                var httpLoaderScript = Jazzcat.getHttpCacheLoaderScript();
-                script.parentNode.insertBefore(httpLoaderScript, script);
+                var httpLoaderScript = Jazzcat.getHttpCacheLoaderScript(options);
+                if (inlineLoader) {
+                    script.parentNode.insertBefore(httpLoaderScript, script);
+                } else {
+                    resultScripts.push(httpLoaderScript);
+                }
                 // ensure this doesn't happen again for this page load
                 Jazzcat.cacheLoaderInserted = true;
             }
 
-            var parent = (script.parentNode.nodeName === "HEAD" ? "head" : "body");
+            var parent;
+            if (inlineLoader) {
+                parent = (script.parentNode.nodeName === "HEAD" ? "head" : "body");
+            } else {
+                // If we're not going to use the inline loader, we'll do 
+                // something terrible and put everything into the head bucket
+                parent = 'head';
+            }
 
             if (jsonp) {
                 // if: the script is not in the cache (or not jsonp), add a loader
                 // else: queue for concatenation
                 if (!httpCache.get(url)) {
                     if (!concat) {
-                        insertLoader(script, [url]);
+                        if (!inlineLoader) {
+                            insertLoaderInContainingElement(script, [url]);
+                        } else {
+                            appendLoaderAndScriptToArray(resultScripts, script, [url]);
+                        }
                     }
                     else {
                         if (toConcat[parent].firstScript === undefined) {
@@ -434,6 +482,9 @@
 
                 // Remove the src attribute
                 script.removeAttribute(options.attribute);
+                if(!inlineLoader) {
+                    resultScripts.push(script);
+                }
             }
             else {
                 if (!concat) {
@@ -452,8 +503,16 @@
         // insert the loaders for uncached head and body scripts if
         // using concatenation
         if (concat) {
-            insertLoader(toConcat['head'].firstScript, toConcat['head'].urls);
-            insertLoader(toConcat['body'].firstScript, toConcat['body'].urls);
+            if (inlineLoader) {
+                insertLoaderInContainingElement(toConcat['head'].firstScript,
+                                                toConcat['head'].urls);
+                insertLoaderInContainingElement(toConcat['body'].firstScript,
+                                                toConcat['body'].urls);
+            } else {
+                appendLoaderAndScriptToArray(resultScripts,
+                                             toConcat['head'].firstScript,
+                                             toConcat['head'].urls);
+            }
         }
 
         // if responseType is js and we are concatenating, remove original scripts
@@ -461,25 +520,25 @@
             for (var i=0, len=scripts.length; i<len; i++) {
                 var script = scripts[i];
                 // Only remove scripts if they are external
-                if (script.getAttribute(options.attribute)) {
+                if (script.getAttribute(options.attribute && inlineLoader)) {
                     script.parentNode.removeChild(script);
                 }
             }
         }
 
-        return scripts;
+        return resultScripts;
     };
 
     /**
      * Private helper that returns a script node that when run, loads the 
      * httpCache from localStorage.
      */
-    Jazzcat.getHttpCacheLoaderScript = function() {
+    Jazzcat.getHttpCacheLoaderScript = function(options) {
         var loadFromCacheScript = document.createElement('script');
         loadFromCacheScript.type = 'text/mobify-script';
         loadFromCacheScript.innerHTML = (httpCache.options.overrideTime ?
-          "Jazzcat.httpCache.load(" + JSON.stringify(httpCache.options) + ");" :
-          "Jazzcat.httpCache.load();" );
+          options.cacheLoadCallback + "(" + JSON.stringify(httpCache.options) + ");" :
+          options.cacheLoadCallback + "();" );
 
         return loadFromCacheScript;
     };
@@ -606,6 +665,8 @@
         responseType: 'jsonp',
         execCallback: 'Jazzcat.exec',
         loadCallback: 'Jazzcat.load',
+        cacheLoadCallback: 'Jazzcat.httpCache.load',
+        inlineLoader: 'true',
         concat: false,
         projectName: '',
     };
