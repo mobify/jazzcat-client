@@ -520,7 +520,7 @@
             for (var i=0, len=scripts.length; i<len; i++) {
                 var script = scripts[i];
                 // Only remove scripts if they are external
-                if (script.getAttribute(options.attribute && inlineLoader)) {
+                if (script.getAttribute(options.attribute) && inlineLoader) {
                     script.parentNode.removeChild(script);
                 }
             }
