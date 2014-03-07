@@ -344,9 +344,9 @@
 
         // A Boolean to control whether the loader is inlined into the document, 
         // or only added to the returned scripts array
-        var inlineLoader = false;
-        if (options && options.inlineLoader) {
-            inlineLoader = true;
+        var inlineLoader = true;
+        if (options && options.inlineLoader !== undefined) {
+            inlineLoader = options.inlineLoader;
         }
 
         scripts = Array.prototype.slice.call(scripts);
@@ -456,7 +456,7 @@
                 // else: queue for concatenation
                 if (!httpCache.get(url)) {
                     if (!concat) {
-                        if (!inlineLoader) {
+                        if (inlineLoader) {
                             insertLoaderInContainingElement(script, [url]);
                         } else {
                             appendLoaderAndScriptToArray(resultScripts, script, [url]);
@@ -526,6 +526,11 @@
             }
         }
 
+        // If the loader was inlined, return the original set of scripts
+        if(inlineLoader) {
+            return scripts;
+        }
+        // Otherwise return the generated list
         return resultScripts;
     };
 
