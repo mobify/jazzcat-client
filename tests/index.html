@@ -630,7 +630,7 @@
                 }
             });
 
-            asyncTest('optimizeScripts', 20, function() {
+            asyncTest('optimizeScripts', 40, function() {
                 httpCache.reset({
                     'http://cached/': {
                         'headers': {'expires': UTC_TWO_WEEKS_FROM_NOW},
@@ -659,11 +659,8 @@
                         }
                     };
 
-                    // Generates a html string that has loaders inserted into
-                    // the correct places, based on the scripts passed into
-                    // the arguments, which are mutated by optimizeScripts.
-                    function getHTMLWithLoader(headScripts, bodyScripts, overrides) {
-                        var doc, combine, results, html;
+                    function getJazzcatScripts(headScripts, bodyScripts, overrides) {
+                        var doc, combine, results;
                         doc = document.implementation.createHTMLDocument("");
                         headScripts.forEach(function(el){
                             doc.head.appendChild(el);
@@ -672,89 +669,109 @@
                             doc.body.appendChild(el);
                         });
                         combine = doc.querySelectorAll("script.combine");
-                        var concat = (overrides && overrides.concat !== undefined ? overrides.concat : true);
-                        var responseType = overrides && overrides.responseType || 'jsonp';
+                        var overrides = overrides || {};
+                        var concat = (overrides.concat !== undefined ? overrides.concat : true);
+                        var inlineLoader = (overrides.inlineLoader !== undefined ? overrides.inlineLoader : true);
+                        var responseType = overrides.responseType || 'jsonp';
 
                         results = Jazzcat.optimizeScripts(combine, {
                             concat: concat,
-                            responseType: responseType
+                            responseType: responseType,
+                            inlineLoader: inlineLoader
+                        });
+
+                        // Remove the `mobify-optimized` and `class` attribute because
+                        // Firefox and Chrome serialize our attributes in different orders
+                        var scripts = doc.querySelectorAll('script');
+                        Array.prototype.slice.call(scripts).forEach(function(script) {
+                            script.removeAttribute('class');
+                            script.removeAttribute('mobify-optimized');
                         });
 
                         // cleanup for next Jazzcat test
                         Jazzcat.cacheLoaderInserted = false;
-                        
-                        // Remove the `mobify-optimized` and `class` attribute because
-                        // Firefox and Chrome serialize our attributes in different orders
-                        var scripts = doc.querySelectorAll('script');
-                        Array.prototype.slice.call(scripts).forEach(function(script){
-                            script.removeAttribute('class');
-                            script.removeAttribute('mobify-optimized');
-                        });
-                        html = Utils.outerHTML(doc.documentElement);
+                        return results;
+                    };
+
+                    // Generates a html string that has loaders inserted into
+                    // the correct places, based on the scripts passed into
+                    // the arguments, which are mutated by optimizeScripts.
+                    function getHTML(headScripts, bodyScripts, overrides) {
+                        var results = getJazzcatScripts(headScripts, bodyScripts, overrides);
+                        var doc = results[0].ownerDocument.documentElement;
+                        var html = Utils.outerHTML(doc);
                         return Capture.enable(html, 'x-');
                     };
 
+                    function getScriptsAsString(headScripts, bodyScripts, overrides) {
+                        var overrides = overrides || {};
+                        overrides.inlineLoader = false;
+                        var scripts = getJazzcatScripts(headScripts, bodyScripts, overrides);
+                        var scriptsString = jQuery.map(scripts, function(script){ return script && Utils.outerHTML(script); }).join('');
+                        return Capture.enable(scriptsString, 'x-');
+                    };
+
                     var scripts = generateScripts();
-                    var html = getHTMLWithLoader([],
+                    var html = getHTML([],
                                                  [scripts.cachedBody]);
                     var expected = "<html><head><title></title></head><body><script>Jazzcat.httpCache.load();<\/script><script>Jazzcat.exec('http://cached/');<\/script></body></html>";
                     equal(html, expected, "Combined - Only in body, script cached");
 
                     var scripts = generateScripts();
-                    var html = getHTMLWithLoader([], 
+                    var html = getHTML([], 
                                                  [scripts.cachedBody, scripts.uncachedBody]);
                     expected = "<html><head><title></title></head><body><script>Jazzcat.httpCache.load();<\/script><script>Jazzcat.exec('http://cached/');<\/script><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/');<\/script></body></html>";
                     equal(html, expected, "Combined - Only in body, scripts not all cached");
 
                     var scripts = generateScripts();
-                    var html = getHTMLWithLoader([scripts.cachedHead],
+                    var html = getHTML([scripts.cachedHead],
                                                  [scripts.cachedBody, scripts.uncachedBody]);
                     expected = "<html><head><title></title><script>Jazzcat.httpCache.load();<\/script><script>Jazzcat.exec('http://cached/');<\/script></head><body><script>Jazzcat.exec('http://cached/');<\/script><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/');<\/script></body></html>";
 
                     equal(html, expected, "Combined - Both head and body, scripts not all cached");
 
                     var scripts = generateScripts();
-                    var html = getHTMLWithLoader([scripts.cachedHead],
+                    var html = getHTML([scripts.cachedHead],
                                                  [scripts.cachedBody]);
                     expected = "<html><head><title></title><script>Jazzcat.httpCache.load();<\/script><script>Jazzcat.exec('http://cached/');<\/script></head><body><script>Jazzcat.exec('http://cached/');<\/script></body></html>";
 
                     equal(html, expected, "Combined - Both head and body, both cached");
 
                     var scripts = generateScripts();
-                    var html = getHTMLWithLoader([scripts.uncachedHead, scripts.uncachedHead2],
+                    var html = getHTML([scripts.uncachedHead, scripts.uncachedHead2],
                                                  [scripts.uncachedBody, scripts.uncachedBody2]);
                     expected = "<html><head><title></title><script>Jazzcat.httpCache.load();<\/script><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F%22%2C%22http%3A%2F%2Funcached%2F2%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/');<\/script><script>Jazzcat.exec('http://uncached/2/');<\/script></head><body><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F%22%2C%22http%3A%2F%2Funcached%2F2%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/');<\/script><script>Jazzcat.exec('http://uncached/2/');<\/script></body></html>";
 
                     equal(html, expected, "Combined - Both head and body, none cached");
 
                     var scripts = generateScripts();
-                    var html = getHTMLWithLoader([scripts.uncachedHead, scripts.cachedHead],
+                    var html = getHTML([scripts.uncachedHead, scripts.cachedHead],
                                                  []);
                     expected = "<html><head><title></title><script>Jazzcat.httpCache.load();<\/script><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/');<\/script><script>Jazzcat.exec('http://cached/');<\/script></head><body></body></html>";
                     equal(html, expected, "Combined - Only in head, scripts not all cached");
 
                     var scripts = generateScripts();
-                    var html = getHTMLWithLoader([scripts.excluded, scripts.cachedHead],
+                    var html = getHTML([scripts.excluded, scripts.cachedHead],
                                                  [scripts.cachedBody]);
                     expected = "<html><head><title></title><script src=\"http://excluded/\"><\/script><script>Jazzcat.httpCache.load();<\/script><script>Jazzcat.exec('http://cached/');<\/script></head><body><script>Jazzcat.exec('http://cached/');<\/script></body></html>";
                     equal(html, expected, "Combined - Excluded script in head");
 
                     var scripts = generateScripts();
-                    var html = getHTMLWithLoader([],
+                    var html = getHTML([],
                                                  [scripts.cachedBody],
                                                  {concat: false});
                     var expected = "<html><head><title></title></head><body><script>Jazzcat.httpCache.load();<\/script><script>Jazzcat.exec('http://cached/');<\/script></body></html>";
                     equal(html, expected, "Separate - Only in body, script cached");
 
                     var scripts = generateScripts();
-                    var html = getHTMLWithLoader([], 
+                    var html = getHTML([], 
                                                  [scripts.cachedBody, scripts.uncachedBody],
                                                  {concat: false});
                     expected = "<html><head><title></title></head><body><script>Jazzcat.httpCache.load();<\/script><script>Jazzcat.exec('http://cached/');<\/script><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/');<\/script></body></html>";
                     equal(html, expected, "Separate - Only in body, scripts not all cached");
 
                     var scripts = generateScripts();
-                    var html = getHTMLWithLoader([scripts.cachedHead],
+                    var html = getHTML([scripts.cachedHead],
                                                  [scripts.cachedBody, scripts.uncachedBody],
                                                  {concat: false});
                     expected = "<html><head><title></title><script>Jazzcat.httpCache.load();<\/script><script>Jazzcat.exec('http://cached/');<\/script></head><body><script>Jazzcat.exec('http://cached/');<\/script><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/');<\/script></body></html>";
@@ -762,7 +779,7 @@
                     equal(html, expected, "Separate - Both head and body, scripts not all cached");
 
                     var scripts = generateScripts();
-                    var html = getHTMLWithLoader([scripts.cachedHead],
+                    var html = getHTML([scripts.cachedHead],
                                                  [scripts.cachedBody],
                                                  {concat: false});
                     expected = "<html><head><title></title><script>Jazzcat.httpCache.load();<\/script><script>Jazzcat.exec('http://cached/');<\/script></head><body><script>Jazzcat.exec('http://cached/');<\/script></body></html>";
@@ -770,7 +787,7 @@
                     equal(html, expected, "Separate - Both head and body, both cached");
 
                     var scripts = generateScripts();
-                    var html = getHTMLWithLoader([scripts.uncachedHead, scripts.cachedHead],
+                    var html = getHTML([scripts.uncachedHead, scripts.cachedHead],
                                                  [],
                                                  {concat: false});
                     expected = "<html><head><title></title><script>Jazzcat.httpCache.load();<\/script><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/');<\/script><script>Jazzcat.exec('http://cached/');<\/script></head><body></body></html>";
@@ -778,7 +795,7 @@
 
 
                     var scripts = generateScripts();
-                    var html = getHTMLWithLoader([scripts.uncachedHead, scripts.uncachedHead2],
+                    var html = getHTML([scripts.uncachedHead, scripts.uncachedHead2],
                                                  [scripts.uncachedBody, scripts.uncachedBody2],
                                                  {concat: false});
                     expected = "<html><head><title></title><script>Jazzcat.httpCache.load();<\/script><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/');<\/script><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F2%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/2/');<\/script></head><body><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/');<\/script><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F2%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/2/');<\/script></body></html>"
@@ -786,14 +803,14 @@
                     equal(html, expected, "Combined - Both head and body, none cached");
 
                     var scripts = generateScripts();
-                    var html = getHTMLWithLoader([scripts.excluded, scripts.cachedHead],
+                    var html = getHTML([scripts.excluded, scripts.cachedHead],
                                                  [scripts.cachedBody],
                                                  {concat: false});
                     expected = "<html><head><title></title><script src=\"http://excluded/\"><\/script><script>Jazzcat.httpCache.load();<\/script><script>Jazzcat.exec('http://cached/');<\/script></head><body><script>Jazzcat.exec('http://cached/');<\/script></body></html>";
                     equal(html, expected, "Separate - Excluded script in head");
 
                     var scripts = generateScripts();
-                    var html = getHTMLWithLoader([scripts.uncachedHead, scripts.excluded],
+                    var html = getHTML([scripts.uncachedHead, scripts.excluded],
                                                  [scripts.uncachedBody, scripts.cachedBody],
                                                  {concat: true, responseType: 'js'});
                     expected = "<html><head><title></title><script src=\"//jazzcat.mobify.com/js/%5B%22http%3A%2F%2Funcached%2F%22%5D\"><\/script><script src=\"http://excluded/\"><\/script></head><body><script src=\"//jazzcat.mobify.com/js/%5B%22http%3A%2F%2Fcached%2F%22%2C%22http%3A%2F%2Funcached%2F%22%5D\"><\/script></body></html>";
@@ -801,7 +818,7 @@
                     equal(html, expected, "Combined, JS response type");
 
                     var scripts = generateScripts();
-                    var html = getHTMLWithLoader([scripts.uncachedHead, scripts.excluded],
+                    var html = getHTML([scripts.uncachedHead, scripts.excluded],
                                                  [scripts.uncachedBody, scripts.cachedBody],
                                                  {concat: false, responseType: 'js'});
                     expected = "<html><head><title></title><script src=\"//jazzcat.mobify.com/js/%5B%22http%3A%2F%2Funcached%2F%22%5D\"><\/script><script src=\"http://excluded/\"><\/script></head><body><script src=\"//jazzcat.mobify.com/js/%5B%22http%3A%2F%2Funcached%2F%22%5D\"><\/script><script src=\"//jazzcat.mobify.com/js/%5B%22http%3A%2F%2Fcached%2F%22%5D\"><\/script></body></html>";
@@ -809,7 +826,7 @@
                     equal(html, expected, "Separate, JS response type");
 
                     var scripts = generateScripts();
-                    var html = getHTMLWithLoader([],
+                    var html = getHTML([],
                                                  [scripts.inline],
                                                  {concat: true, responseType: 'js'});
                     expected = "<html><head><title></title></head><body><script><\/script></body></html>";
@@ -818,7 +835,7 @@
 
 
                     var scripts = generateScripts();
-                    var html = getHTMLWithLoader([],
+                    var html = getHTML([],
                                                  [scripts.inline],
                                                  {concat: true, responseType: 'jsonp'});
                     expected = "<html><head><title></title></head><body><script><\/script></body></html>";
@@ -826,7 +843,7 @@
                     equal(html, expected, "Regression, ensure inline scripts don't get removed, jsonp response type");
 
                     var scripts = generateScripts();
-                    var html = getHTMLWithLoader([],
+                    var html = getHTML([],
                                                  [scripts.mobifyscript],
                                                  {concat: true, responseType: 'jsonp'});
                     expected = "<html><head><title></title></head><body><script src=\"http://cdn.mobify.com/mobify.js\"><\/script></body></html>";
@@ -834,11 +851,161 @@
                     equal(html, expected, "Ensure mobify scripts get removed, jsonp response type");
 
                     var scripts = generateScripts();
-                    var html = getHTMLWithLoader([],
+                    var html = getHTML([],
                                                  [scripts.scriptWithOnload],
                                                  {concat: false});
                     expected = "<html><head><title></title></head><body><script>Jazzcat.httpCache.load();<\/script><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/', 'console.log(\\\'foo\\\')');<\/script></body></html>";
                     equal(html, expected, "Script with onload handler");
+
+                    // The following are the same as above, but instead of sticking loaders inside of the document, we place them in an array
+                    // of scripts to be returned
+                    var scripts = generateScripts();
+                    var html = getScriptsAsString([],
+                                                 [scripts.cachedBody]);
+                    var expected = "<script>Jazzcat.httpCache.load();<\/script><script>Jazzcat.exec('http://cached/');<\/script>";
+                    equal(html, expected, "Combined - Only in body, script cached");
+
+
+                    var scripts = generateScripts();
+                    var html = getScriptsAsString([], 
+                                                 [scripts.cachedBody, scripts.uncachedBody]);
+                    expected = "<script>Jazzcat.httpCache.load();<\/script><script>Jazzcat.exec('http://cached/');<\/script><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/');<\/script>";
+                    equal(html, expected, "Combined - Only in body, scripts not all cached");
+
+                    var scripts = generateScripts();
+                    var html = getScriptsAsString([scripts.cachedHead],
+                                                 [scripts.cachedBody, scripts.uncachedBody]);
+                    expected = "<script>Jazzcat.httpCache.load();<\/script><script>Jazzcat.exec('http://cached/');<\/script><script>Jazzcat.exec('http://cached/');<\/script><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/');<\/script>";
+
+                    equal(html, expected, "Combined - Both head and body, scripts not all cached");
+
+                    var scripts = generateScripts();
+                    var html = getScriptsAsString([scripts.cachedHead],
+                                                 [scripts.cachedBody]);
+                    expected = "<script>Jazzcat.httpCache.load();<\/script><script>Jazzcat.exec('http://cached/');<\/script><script>Jazzcat.exec('http://cached/');<\/script>";
+
+                    equal(html, expected, "Combined - Both head and body, both cached");
+
+                    var scripts = generateScripts();
+                    var html = getScriptsAsString([scripts.uncachedHead, scripts.uncachedHead2],
+                                                 [scripts.uncachedBody, scripts.uncachedBody2]);
+                    expected = "<script>Jazzcat.httpCache.load();<\/script><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F%22%2C%22http%3A%2F%2Funcached%2F2%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/');<\/script><script>Jazzcat.exec('http://uncached/2/');<\/script><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F%22%2C%22http%3A%2F%2Funcached%2F2%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/');<\/script><script>Jazzcat.exec('http://uncached/2/');<\/script>";
+
+                    equal(html, expected, "Combined - Both head and body, none cached");
+
+                    var scripts = generateScripts();
+                    var html = getScriptsAsString([scripts.uncachedHead, scripts.cachedHead],
+                                                 []);
+                    expected = "<script>Jazzcat.httpCache.load();<\/script><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/');<\/script><script>Jazzcat.exec('http://cached/');<\/script>";
+                    equal(html, expected, "Combined - Only in head, scripts not all cached");
+
+                    var scripts = generateScripts();
+                    var html = getScriptsAsString([scripts.excluded, scripts.cachedHead],
+                                                 [scripts.cachedBody]);
+                    expected = "<script src=\"http://excluded/\"><\/script><script>Jazzcat.httpCache.load();<\/script><script>Jazzcat.exec('http://cached/');<\/script><script>Jazzcat.exec('http://cached/');<\/script>";
+                    equal(html, expected, "Combined - Excluded script in head");
+
+                    var scripts = generateScripts();
+                    var html = getScriptsAsString([],
+                                                 [scripts.cachedBody],
+                                                 {concat: false});
+                    var expected = "<script>Jazzcat.httpCache.load();<\/script><script>Jazzcat.exec('http://cached/');<\/script>";
+                    equal(html, expected, "Separate - Only in body, script cached");
+
+                    var scripts = generateScripts();
+                    var html = getScriptsAsString([], 
+                                                 [scripts.cachedBody, scripts.uncachedBody],
+                                                 {concat: false});
+                    expected = "<script>Jazzcat.httpCache.load();<\/script><script>Jazzcat.exec('http://cached/');<\/script><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/');<\/script>";
+                    equal(html, expected, "Separate - Only in body, scripts not all cached");
+
+                    var scripts = generateScripts();
+                    var html = getScriptsAsString([scripts.cachedHead],
+                                                 [scripts.cachedBody, scripts.uncachedBody],
+                                                 {concat: false});
+                    expected = "<script>Jazzcat.httpCache.load();<\/script><script>Jazzcat.exec('http://cached/');<\/script><script>Jazzcat.exec('http://cached/');<\/script><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/');<\/script>";
+
+                    equal(html, expected, "Separate - Both head and body, scripts not all cached");
+
+                    var scripts = generateScripts();
+                    var html = getScriptsAsString([scripts.cachedHead],
+                                                 [scripts.cachedBody],
+                                                 {concat: false});
+                    expected = "<script>Jazzcat.httpCache.load();<\/script><script>Jazzcat.exec('http://cached/');<\/script><script>Jazzcat.exec('http://cached/');<\/script>";
+
+                    equal(html, expected, "Separate - Both head and body, both cached");
+
+                    var scripts = generateScripts();
+                    var html = getScriptsAsString([scripts.uncachedHead, scripts.cachedHead],
+                                                 [],
+                                                 {concat: false});
+                    expected = "<script>Jazzcat.httpCache.load();<\/script><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/');<\/script><script>Jazzcat.exec('http://cached/');<\/script>";
+                    equal(html, expected, "Separate - Only in head, scripts not all cached");
+
+
+                    var scripts = generateScripts();
+                    var html = getScriptsAsString([scripts.uncachedHead, scripts.uncachedHead2],
+                                                 [scripts.uncachedBody, scripts.uncachedBody2],
+                                                 {concat: false});
+                    expected = "<script>Jazzcat.httpCache.load();<\/script><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/');<\/script><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F2%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/2/');<\/script><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/');<\/script><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F2%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/2/');<\/script>"
+
+                    equal(html, expected, "Combined - Both head and body, none cached");
+
+                    var scripts = generateScripts();
+                    var html = getScriptsAsString([scripts.excluded, scripts.cachedHead],
+                                                 [scripts.cachedBody],
+                                                 {concat: false});
+                    expected = "<script src=\"http://excluded/\"><\/script><script>Jazzcat.httpCache.load();<\/script><script>Jazzcat.exec('http://cached/');<\/script><script>Jazzcat.exec('http://cached/');<\/script>";
+                    equal(html, expected, "Separate - Excluded script in head");
+
+                    var scripts = generateScripts();
+                    var html = getScriptsAsString([scripts.uncachedHead, scripts.excluded],
+                                                 [scripts.uncachedBody, scripts.cachedBody],
+                                                 {concat: true, responseType: 'js'});
+                    expected = "<script src=\"//jazzcat.mobify.com/js/%5B%22http%3A%2F%2Funcached%2F%22%5D\"><\/script><script src=\"http://excluded/\"><\/script><script src=\"//jazzcat.mobify.com/js/%5B%22http%3A%2F%2Fcached%2F%22%2C%22http%3A%2F%2Funcached%2F%22%5D\"><\/script>";
+
+                    equal(html, expected, "Combined, JS response type");
+
+                    var scripts = generateScripts();
+                    var html = getScriptsAsString([scripts.uncachedHead, scripts.excluded],
+                                                 [scripts.uncachedBody, scripts.cachedBody],
+                                                 {concat: false, responseType: 'js'});
+                    expected = "<script src=\"//jazzcat.mobify.com/js/%5B%22http%3A%2F%2Funcached%2F%22%5D\"><\/script><script src=\"http://excluded/\"><\/script><script src=\"//jazzcat.mobify.com/js/%5B%22http%3A%2F%2Funcached%2F%22%5D\"><\/script><script src=\"//jazzcat.mobify.com/js/%5B%22http%3A%2F%2Fcached%2F%22%5D\"><\/script>";
+
+                    equal(html, expected, "Separate, JS response type");
+
+                    var scripts = generateScripts();
+                    var html = getScriptsAsString([],
+                                                 [scripts.inline],
+                                                 {concat: true, responseType: 'js'});
+                    expected = "<script><\/script>";
+
+                    equal(html, expected, "Regression, ensure inline scripts don't get removed, JS response type");
+
+
+                    var scripts = generateScripts();
+                    var html = getScriptsAsString([],
+                                                 [scripts.inline],
+                                                 {concat: true, responseType: 'jsonp'});
+                    expected = "<script><\/script>";
+
+                    equal(html, expected, "Regression, ensure inline scripts don't get removed, jsonp response type");
+
+                    var scripts = generateScripts();
+                    var html = getScriptsAsString([],
+                                                 [scripts.mobifyscript],
+                                                 {concat: true, responseType: 'jsonp'});
+                    expected = "<script src=\"http://cdn.mobify.com/mobify.js\"><\/script>";
+
+                    equal(html, expected, "Ensure mobify scripts get removed, jsonp response type");
+
+                    var scripts = generateScripts();
+                    var html = getScriptsAsString([],
+                                                 [scripts.scriptWithOnload],
+                                                 {concat: false});
+                    expected = "<script>Jazzcat.httpCache.load();<\/script><script src=\"//jazzcat.mobify.com/jsonp/Jazzcat.load/%5B%22http%3A%2F%2Funcached%2F%22%5D\"><\/script><script>Jazzcat.exec('http://uncached/', 'console.log(\\\'foo\\\')');<\/script>";
+                    equal(html, expected, "Script with onload handler");
+
                     start();
                 });
             });
