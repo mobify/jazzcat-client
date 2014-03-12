@@ -682,11 +682,16 @@
 
                         // Remove the `mobify-optimized` and `class` attribute because
                         // Firefox and Chrome serialize our attributes in different orders
-                        var scripts = doc.querySelectorAll('script');
-                        Array.prototype.slice.call(scripts).forEach(function(script) {
+                        var remove = function(script) {
+                            if (!script) {
+                                return;
+                            }
                             script.removeAttribute('class');
                             script.removeAttribute('mobify-optimized');
-                        });
+                        }
+                        var scripts = doc.querySelectorAll('script');
+                        Array.prototype.slice.call(scripts).forEach(remove);
+                        Array.prototype.slice.call(results).forEach(remove);
 
                         // cleanup for next Jazzcat test
                         Jazzcat.cacheLoaderInserted = false;
