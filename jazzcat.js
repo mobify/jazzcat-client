@@ -337,6 +337,8 @@
     // into the document
     Jazzcat.cacheLoaderInserted = false;
     Jazzcat.optimizeScripts = function(scripts, options) {
+        options = options || {};
+        
         if (options && options.cacheOverrideTime !== undefined) {
             Utils.extend(httpCache.options,
               {overrideTime: options.cacheOverrideTime});
@@ -344,10 +346,8 @@
 
         // A Boolean to control whether the loader is inlined into the document, 
         // or only added to the returned scripts array
-        var inlineLoader = true;
-        if (options && options.inlineLoader !== undefined) {
-            inlineLoader = options.inlineLoader;
-        }
+        var inlineLoader = ((options.inlineLoader !== undefined) ?
+          options.inlineLoader: true);
 
         scripts = Array.prototype.slice.call(scripts);
 
@@ -372,11 +372,9 @@
         // helper for appending loader script into an array before the 
         // referenced script
         var appendLoaderAndScriptToArray = function(array, script, urls) {
-            if (array) {
-                var loader  = Jazzcat.getLoaderScript(urls, options);
-                array.push(loader);
-                array.push(script);
-            }
+            var loader  = Jazzcat.getLoaderScript(urls, options);
+            array.push(loader);
+            array.push(script);
         };
 
         var url;
@@ -393,13 +391,6 @@
 
         // an array to accumulate resulting scripts in and later return
         var resultScripts = [];
-        /**
-        DEBUG
-        **/
-        // resultScripts.push = function() {
-        //     debugger;
-        //     Array.prototype.push.apply(this, arguments);
-        // };
 
         for (var i=0, len=scripts.length; i<len; i++) {
             var script = scripts[i];
@@ -482,7 +473,7 @@
 
                 // Remove the src attribute
                 script.removeAttribute(options.attribute);
-                if(!inlineLoader) {
+                if (!inlineLoader) {
                     resultScripts.push(script);
                 }
             }
@@ -527,7 +518,7 @@
         }
 
         // If the loader was inlined, return the original set of scripts
-        if(inlineLoader) {
+        if (inlineLoader) {
             return scripts;
         }
         // Otherwise return the generated list
