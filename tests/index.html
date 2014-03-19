@@ -578,11 +578,12 @@
                 try {
                     var projectName = "qux";
                     var callback = "bar";
-                    expected = "//jazzcat.mobify.com/project-qux/jsonp/bar/%5B%22%2F%2Fajax.googleapis.com%2Fajax%2Flibs%2Fangularjs%2F1.0.5%2Fangular.min.js%22%2C%22%2F%2Fajax.googleapis.com%2Fajax%2Flibs%2Fjquery%2F1.9.1%2Fjquery.min.js%22%5D";
+                    expected = "//jazzcat.mobify.com/project-qux/cb1234/jsonp/bar/%5B%22%2F%2Fajax.googleapis.com%2Fajax%2Flibs%2Fangularjs%2F1.0.5%2Fangular.min.js%22%2C%22%2F%2Fajax.googleapis.com%2Fajax%2Flibs%2Fjquery%2F1.9.1%2Fjquery.min.js%22%5D";
 
                     equal(Jazzcat.getURL(urls, {
                         loadCallback: callback,
-                        projectName: projectName
+                        projectName: projectName,
+                        cacheBreaker: 1234
                     }), expected);
                 // Reset projectName
                 } finally {

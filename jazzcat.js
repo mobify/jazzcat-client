@@ -512,6 +512,7 @@
         var options = Utils.extend({}, Jazzcat.defaults, options || {});
         return options.base +
                (options.projectName ? '/project-' + options.projectName : '') +
+               (options.cacheBreaker ? '/cb' + options.cacheBreaker : '') +
                '/' + options.responseType +
                (options.responseType === 'jsonp' ? '/' + options.loadCallback : '') +
                '/' + encodeURIComponent(JSON.stringify(urls.slice().sort())); // TODO only sort for jsonp
