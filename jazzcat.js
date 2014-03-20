@@ -344,11 +344,6 @@
               {overrideTime: options.cacheOverrideTime});
         }
 
-        // A Boolean to control whether the loader is inlined into the document, 
-        // or only added to the returned scripts array
-        var inlineLoader = ((options.inlineLoader !== undefined) ?
-          options.inlineLoader: true);
-
         scripts = Array.prototype.slice.call(scripts);
 
         // Fastfail if there are no scripts or if required features are missing.
@@ -357,8 +352,11 @@
         }
 
         options = Utils.extend({}, Jazzcat.defaults, options || {});
-        var jsonp = (options.responseType === 'jsonp');
         var concat = options.concat;
+        // A Boolean to control whether the loader is inlined into the document, 
+        // or only added to the returned scripts array
+        var inlineLoader = ((options.inlineLoader !== undefined) ?
+          options.inlineLoader: true);
 
         // helper method for inserting the loader script
         // before the first uncached script in the "uncached" array
@@ -371,21 +369,22 @@
         };
         // helper for appending loader script into an array before the 
         // referenced script
-        var appendLoaderAndScriptToArray = function(array, script, urls) {
-            var loader  = Jazzcat.getLoaderScript(urls, options);
+        var appendLoaderForScriptsToArray = function(array, urls) {
+            var loader = Jazzcat.getLoaderScript(urls, options);
             array.push(loader);
-            array.push(script);
         };
 
         var url;
         var toConcat = {
             'head': {
                 firstScript: undefined,
-                urls: []
+                urls: [],
+                scripts: []
             },
             'body': {
                 firstScript: undefined,
-                urls: []
+                urls: [],
+                scripts: []
             }
         };
 
@@ -421,7 +420,7 @@
 
             // Load what we have in http cache, and insert loader into document 
             // or result array
-            if (jsonp && !Jazzcat.cacheLoaderInserted) {
+            if (!Jazzcat.cacheLoaderInserted) {
                 httpCache.load(httpCache.options);
                 var httpLoaderScript = Jazzcat.getHttpCacheLoaderScript(options);
                 if (inlineLoader) {
@@ -442,52 +441,41 @@
                 parent = 'head';
             }
 
-            if (jsonp) {
-                // if: the script is not in the cache (or not jsonp), add a loader
-                // else: queue for concatenation
-                if (!httpCache.get(url)) {
-                    if (!concat) {
-                        if (inlineLoader) {
-                            insertLoaderInContainingElement(script, [url]);
-                        } else {
-                            appendLoaderAndScriptToArray(resultScripts, script, [url]);
-                        }
-                    }
-                    else {
-                        if (toConcat[parent].firstScript === undefined) {
-                            toConcat[parent].firstScript = script;
-                        }
-                        toConcat[parent].urls.push(url);
-                    }
-                }
-                script.type = 'text/mobify-script';
-                // Rewriting script to grab contents from our in-memory cache
-                // ex. <script>Jazzcat.exec("http://code.jquery.com/jquery.js")</script>
-                if (script.hasAttribute('onload')){
-                    var onload = script.getAttribute('onload');
-                    script.innerHTML =  options.execCallback + "('" + url + "', '" + onload.replace(/'/g, '\\\'') + "');";
-                    script.removeAttribute('onload');
-                } else {
-                    script.innerHTML =  options.execCallback + "('" + url + "');";
-                }
-
-                // Remove the src attribute
-                script.removeAttribute(options.attribute);
-                if (!inlineLoader) {
-                    resultScripts.push(script);
-                }
-            }
-            else {
+            // if: the script is not in the cache, add a loader
+            // else: queue for concatenation
+            if (!httpCache.get(url)) {
                 if (!concat) {
-                    var jazzcatUrl = Jazzcat.getURL([url], options);
-                    script.setAttribute(options.attribute, jazzcatUrl);
-                }
-                else {
+                    if (inlineLoader) {
+                        insertLoaderInContainingElement(script, [url]);
+                    } else {
+                        appendLoaderForScriptsToArray(resultScripts, [url]);
+                    }
+                } else {
+                    toConcat[parent].urls.push(url);
+                    // Remember details of first uncached script
                     if (toConcat[parent].firstScript === undefined) {
                         toConcat[parent].firstScript = script;
+                        var firstUncachedScriptIndex = resultScripts.length;
                     }
-                    toConcat[parent].urls.push(url);
                 }
+            }
+            script.type = 'text/mobify-script';
+            // Rewriting script to grab contents from our in-memory cache
+            // ex. <script>Jazzcat.exec("http://code.jquery.com/jquery.js")</script>
+            if (script.hasAttribute('onload')){
+                var onload = script.getAttribute('onload');
+                script.innerHTML =  options.execCallback + "('" + url + "', '" + onload.replace(/'/g, '\\\'') + "');";
+                script.removeAttribute('onload');
+            } else {
+                script.innerHTML =  options.execCallback + "('" + url + "');";
+            }
+
+            // Remove the src attribute
+            script.removeAttribute(options.attribute);
+            
+            // Enqueue the script to be returned
+            if (!inlineLoader) {
+                resultScripts.push(script);
             }
 
         }
@@ -500,19 +488,10 @@
                 insertLoaderInContainingElement(toConcat['body'].firstScript,
                                                 toConcat['body'].urls);
             } else {
-                appendLoaderAndScriptToArray(resultScripts,
-                                             toConcat['head'].firstScript,
-                                             toConcat['head'].urls);
-            }
-        }
-
-        // if responseType is js and we are concatenating, remove original scripts
-        if (!jsonp && concat) {
-            for (var i=0, len=scripts.length; i<len; i++) {
-                var script = scripts[i];
-                // Only remove scripts if they are external
-                if (script.getAttribute(options.attribute) && inlineLoader) {
-                    script.parentNode.removeChild(script);
+                // splice in loader for uncached scripts if there are any
+                if(firstUncachedScriptIndex) {
+                    var loader = Jazzcat.getLoaderScript(toConcat['head'].urls, options);
+                    resultScripts.splice(firstUncachedScriptIndex, 0, loader);
                 }
             }
         }
