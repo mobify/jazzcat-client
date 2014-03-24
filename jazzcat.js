@@ -549,7 +549,7 @@
                (options.cacheBreaker ? '/cb' + options.cacheBreaker : '') +
                '/' + options.responseType +
                (options.responseType === 'jsonp' ? '/' + options.loadCallback : '') +
-               '/' + encodeURIComponent(JSON.stringify(urls.slice().sort())); // TODO only sort for jsonp
+               '/' + encodeURIComponent(JSON.stringify(urls.slice().sort()));
     };
 
     var scriptSplitRe = /(<\/scr)(ipt\s*>)/ig;
