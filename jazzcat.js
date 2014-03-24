@@ -489,7 +489,7 @@
                                                 toConcat['body'].urls);
             } else {
                 // splice in loader for uncached scripts if there are any
-                if(firstUncachedScriptIndex) {
+                if (firstUncachedScriptIndex) {
                     var loader = Jazzcat.getLoaderScript(toConcat['head'].urls, options);
                     resultScripts.splice(firstUncachedScriptIndex, 0, loader);
                 }
